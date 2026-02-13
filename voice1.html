@@ -1,0 +1,1038 @@
+<!-- 
+ 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Voice Email Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* This handles the solid blue background for the active page */
+        .active-link { background: #2563eb !important; color: white !important; border-radius: 12px; }
+        .mic-active { color: #ef4444; filter: drop-shadow(0 0 8px #ef4444); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        /* Smooth transition for hover effects */
+        .nav-btn { transition: all 0.2s ease-in-out; border-radius: 12px; }
+    </style>
+
+</head>
+<body class="bg-slate-100 flex h-screen overflow-hidden">
+
+    <aside class="w-64 bg-white border-r border-gray-200 flex flex-col p-6">
+        <div class="flex items-center gap-3 mb-10 px-2">
+            <div class="bg-blue-600 p-2 rounded-lg text-white"><i class="fa-solid fa-envelope"></i></div>
+            <h1 class="font-bold text-xl text-gray-800">Bio-Mail</h1>
+        </div>
+        
+        <nav class="flex-grow space-y-2">
+            <button onclick="loadContent('inbox')" id="btn-inbox" class="nav-btn w-full flex items-center gap-4 p-4 text-gray-600 hover:bg-blue-50 hover:text-blue-600 active-link">
+                <i class="fa-solid fa-inbox w-5"></i> <span>Inbox</span>
+            </button>
+            <button onclick="loadContent('compose')" id="btn-compose" class="nav-btn w-full flex items-center gap-4 p-4 text-gray-600 hover:bg-blue-50 hover:text-blue-600">
+                <i class="fa-solid fa-pen-to-square w-5"></i> <span>Compose</span>
+            </button>
+
+
+
+             <button onclick="loadContent('telegram')" id="btn-telegram" class="nav-btn w-full flex items-center gap-4 p-4 text-gray-600 hover:bg-blue-50 hover:text-blue-600">
+                <i class="fa-brands fa-telegram w-5 text-blue-500"></i> <span>Telegram</span>
+            </button>
+
+
+            <button onclick="loadContent('sent')" id="btn-sent" class="nav-btn w-full flex items-center gap-4 p-4 text-gray-600 hover:bg-blue-50 hover:text-blue-600">
+                <i class="fa-solid fa-paper-plane w-5"></i> <span>Sent</span>
+            </button>
+            <button onclick="loadContent('trash')" id="btn-trash" class="nav-btn w-full flex items-center gap-4 p-4 text-gray-600 hover:bg-blue-50 hover:text-blue-600">
+                <i class="fa-solid fa-trash w-5"></i> <span>Trash</span>
+            </button>
+        </nav>
+
+        <button onclick="logout()" class="nav-btn w-full flex items-center gap-4 p-4 text-red-500 hover:bg-red-50 mt-auto">
+            <i class="fa-solid fa-right-from-bracket w-5"></i> <span>Logout</span>
+        </button>
+    </aside>
+
+    <main class="flex-grow flex flex-col">
+        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8">
+            <div class="flex items-center gap-3">
+                <i id="mic-icon" class="fa-solid fa-microphone text-gray-300 transition-all duration-300"></i>
+                <span id="status-text" class="text-sm font-medium text-gray-400">System Ready</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="user-display" class="text-sm font-bold text-gray-700 uppercase">User</span>
+                <div class="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-user text-slate-500 text-xs"></i>
+                </div>
+            </div>
+        </header>
+
+        <section id="main-content" class="p-8">
+            </section>
+    </main>
+    
+
+ <script>
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    const synth = window.speechSynthesis;
+    recognition.continuous = true;
+    recognition.lang = 'en-US';
+
+    const GMAIL_TOKEN = localStorage.getItem('gmail_token');
+
+    // --- TELEGRAM CONFIGURATION ---
+    const TELEGRAM_TOKEN = '8134338978:AAEvp61dDpQ7OFUmu4moyX55EOVNKnZ14F0';
+    const DEMO_GROUP_ID = "-5247206828";
+    
+    // Telegram State & Queue Management
+    let lastUpdateId = 0;
+    let tgState = "idle"; 
+    let tgTempDraft = "";
+    let messageQueue = []; // Holds multiple incoming messages
+    let queueIndex = 0;    // Tracks which message is being read
+    let lastIncomingMsg = ""; 
+
+    // Gmail State
+    let currentEmailList = []; 
+    let composeState = "idle"; 
+    let tempValue = ""; 
+
+    const templates = {
+        inbox: `<h2 class="text-2xl font-bold">Your Inbox</h2><div id="mail-list" class="mt-4 space-y-3">Loading emails...</div>`,
+        compose: `<h2 class="text-2xl font-bold mb-4">Compose New Mail</h2>
+                  <div class="p-6 bg-white rounded-xl shadow border border-gray-100 space-y-4">
+                      <input type="email" id="to" placeholder="Recipient Gmail" class="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
+                      <input type="text" id="subject" placeholder="Subject" class="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
+                      <textarea id="body" placeholder="Message content..." class="w-full p-3 border rounded-lg h-32 outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                      <div class="flex gap-4">
+                        <button onclick="handleSend()" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">Send Email</button>
+                        <button onclick="resetCompose()" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-bold">Reset</button>
+                      </div>
+                  </div>`,
+        sent: `<h2 class="text-2xl font-bold">Sent Messages</h2><div id="mail-list" class="mt-4 space-y-3">Loading sent mail...</div>`,
+        trash: `<h2 class="text-2xl font-bold">Trash Bin</h2><div id="mail-list" class="mt-4 space-y-3">Loading trash...</div>`,
+        telegram: `<h2 class="text-2xl font-bold text-blue-600">Telegram Messages</h2>
+                   <div id="telegram-list" class="mt-4 space-y-3 max-h-[400px] overflow-y-auto">Syncing...</div>
+                   <div id="tg-reply-bar" class="mt-8 p-6 bg-blue-50 border-2 border-blue-200 rounded-2xl shadow-inner">
+                        <div class="flex items-center gap-3 mb-2">
+                            <div id="tg-status-dot" class="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                            <span id="tg-status-text" class="text-xs font-bold text-blue-600 uppercase">Telegram Voice Module</span>
+                        </div>
+                        <div id="tg-draft-display" class="p-3 bg-white rounded-lg border border-blue-100 text-gray-700 italic min-h-[50px]">
+                            Awaiting commands...
+                        </div>
+                   </div>`
+    };
+
+    // --- TELEGRAM LOGIC ---
+    async function fetchTelegramMessages() {
+        const listDiv = document.getElementById('telegram-list');
+        // Prevent fetching if a voice conversation is already active
+        if (!listDiv || tgState !== "idle") return; 
+
+        try {
+            const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?offset=${lastUpdateId + 1}`);
+            const data = await res.json();
+
+            if (data.result && data.result.length > 0) {
+                messageQueue = []; // Clear current queue
+                queueIndex = 0;
+
+                data.result.forEach(update => {
+                    lastUpdateId = update.update_id;
+                    const msg = update.message;
+                    if (!msg || !msg.text) return;
+
+                    // Add to message queue
+                    messageQueue.push({
+                        sender: msg.from.first_name,
+                        text: msg.text
+                    });
+
+                    // Visual UI update
+                    listDiv.innerHTML = `
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 mb-2">
+                            <span class="text-xs font-bold text-blue-500 uppercase">From: ${msg.from.first_name}</span>
+                            <p class="text-gray-800">${msg.text}</p>
+                        </div>` + listDiv.innerHTML;
+                });
+
+                // Start permission flow
+                tgState = "WAITING_FOR_READ_PERMISSION";
+                speak(`You have ${messageQueue.length} new messages. Would you like to hear them?`);
+            }
+        } catch (err) { console.error("Telegram Sync Error:", err); }
+    }
+
+    function processNextMessage() {
+        if (queueIndex < messageQueue.length) {
+            const currentMsg = messageQueue[queueIndex];
+            lastIncomingMsg = currentMsg.text; // Store text for reply context
+            tgState = "WAITING_FOR_REPLY_PERMISSION";
+            speak(`Message ${queueIndex + 1} from ${currentMsg.sender} says: ${currentMsg.text}. Would you like to reply?`);
+        } else {
+            tgState = "idle";
+            speak("All new messages have been processed. Returning to standby.");
+        }
+    }
+
+    async function sendTelegramMessage(chatId, text) {
+        try {
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: text })
+            });
+            speak("Your message has been successfully transmitted.");
+            // After sending, move to next message in queue
+            queueIndex++;
+            setTimeout(processNextMessage, 1000);
+        } catch (err) { speak("Failed to send message."); }
+    }
+
+    // --- VOICE RECOGNITION RESULTS ---
+    recognition.onresult = (event) => {
+        const cmd = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+        const draftDisplay = document.getElementById('tg-draft-display');
+
+        // --- TELEGRAM STATE MACHINE ---
+        
+        // 1. Initial Permission to Read
+        if (tgState === "WAITING_FOR_READ_PERMISSION") {
+            if (cmd.includes("yes")) {
+                processNextMessage();
+            } else {
+                tgState = "idle";
+                speak("Understood. Messages remain unread in your list.");
+            }
+            return;
+        }
+
+        // 2. Permission to Reply to Current Message
+        if (tgState === "WAITING_FOR_REPLY_PERMISSION") {
+            if (cmd.includes("yes") || cmd.includes("reply")) {
+                tgState = "awaiting_msg";
+                speak("Please dictate your reply.");
+            } else {
+                queueIndex++;
+                processNextMessage();
+            }
+            return;
+        }
+
+        // 3. Dictation & Verification Flow
+        if (tgState === "awaiting_msg") {
+            tgTempDraft = cmd;
+            tgState = "verifying";
+            speak(`I heard: ${tgTempDraft}. Is this correct?`);
+            if(draftDisplay) draftDisplay.innerText = `Drafting: "${tgTempDraft}"`;
+            return;
+        }
+
+        if (tgState === "verifying") {
+            if (cmd.includes("yes")) {
+                tgState = "final_confirm";
+                speak("Message verified. Shall I send it to the group now?");
+            } else {
+                tgState = "awaiting_msg";
+                speak("I apologize. Please repeat your message.");
+            }
+            return;
+        }
+
+        if (tgState === "final_confirm") {
+            if (cmd.includes("yes")) {
+                sendTelegramMessage(DEMO_GROUP_ID, tgTempDraft);
+            } else {
+                speak("Message discarded.");
+                queueIndex++;
+                processNextMessage();
+            }
+            return;
+        }
+
+        // Manual "Reply" Trigger
+        if (cmd.includes("reply") && tgState === "idle") {
+            tgState = "awaiting_msg";
+            speak("Please dictate your message.");
+            return;
+        }
+
+        // --- NAVIGATION COMMANDS ---
+        if (cmd.includes("inbox")) { composeState = "idle"; loadContent('inbox'); speak("Opening inbox."); return; }
+        if (cmd.includes("sent")) { composeState = "idle"; loadContent('sent'); speak("Viewing sent messages."); return; }
+        if (cmd.includes("trash")) { composeState = "idle"; loadContent('trash'); speak("Opening trash."); return; }
+        if (cmd.includes("telegram") || cmd.includes("message")) { loadContent('telegram'); speak("Displaying Telegram interface."); return; }
+        if (cmd.includes("logout")) { logout(); return; }
+
+        // --- GMAIL COMPOSE (UNCHANGED) ---
+        if (cmd.includes("compose") && composeState === "idle") {
+            loadContent('compose');
+            composeState = "confirm_start";
+            speak("Opening compose box. Do you wish to compose a new email?");
+            return;
+        }
+
+        if (composeState === "confirm_start") {
+            if (cmd.includes("yes")) { composeState = "awaiting_recipient"; speak("Please state the recipient's email address."); }
+            else { composeState = "idle"; loadContent('inbox'); speak("Returning to inbox."); }
+            return;
+        }
+        // ... rest of your Gmail logic (verifying_recipient, subject, body, etc.)
+        if (composeState === "awaiting_recipient") { tempValue = cmd.replace(/\s/g, '').replace('at', '@'); composeState = "verifying_recipient"; speak(`I heard ${tempValue}. Is this correct?`); return; }
+        if (composeState === "verifying_recipient") { if (cmd.includes("yes")) { document.getElementById('to').value = tempValue; composeState = "awaiting_subject"; speak("Recipient saved. Please state the subject."); } else { composeState = "awaiting_recipient"; speak("Please repeat the address."); } return; }
+        if (composeState === "awaiting_subject") { tempValue = cmd; composeState = "verifying_subject"; speak(`The subject is ${tempValue}. Is this correct?`); return; }
+        if (composeState === "verifying_subject") { if (cmd.includes("yes")) { document.getElementById('subject').value = tempValue; composeState = "awaiting_body"; speak("Subject saved. Please dictate your message."); } else { composeState = "awaiting_subject"; speak("Please repeat the subject."); } return; }
+        if (composeState === "awaiting_body") { tempValue = cmd; composeState = "verifying_body"; speak(`Your message is: ${tempValue}. Should I add this?`); return; }
+        if (composeState === "verifying_body") { if (cmd.includes("yes")) { document.getElementById('body').value = tempValue; composeState = "ready_to_send"; speak("Message prepared. Say 'Send email' to finalize."); } else { composeState = "awaiting_body"; speak("Please repeat the message."); } return; }
+        if (cmd.includes("send email") && composeState === "ready_to_send") { handleSend(); return; }
+        if (cmd.includes("reset")) { resetCompose(); return; }
+
+        // Email Indexing
+        const numberMap = { "one": 0, "1": 0, "two": 1, "2": 1, "three": 2, "3": 2, "four": 3, "4": 3, "five": 4, "5": 4 };
+        for (let word in numberMap) {
+            if (cmd.includes(`email ${word}`) || cmd.includes(`mail ${word}`)) {
+                openAndReadEmail(numberMap[word]);
+                return;
+            }
+        }
+    };
+
+    // --- HELPER FUNCTIONS ---
+    async function fetchGmailData(label) {
+        const listDiv = document.getElementById('mail-list');
+        if (!GMAIL_TOKEN) return;
+        try {
+            const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=${label.toUpperCase()}&maxResults=5`, {
+                headers: { 'Authorization': `Bearer ${GMAIL_TOKEN}` }
+            });
+            const data = await res.json();
+            currentEmailList = data.messages || []; 
+            listDiv.innerHTML = "";
+            for (let i = 0; i < currentEmailList.length; i++) {
+                const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${currentEmailList[i].id}`, {
+                    headers: { 'Authorization': `Bearer ${GMAIL_TOKEN}` }
+                });
+                const details = await detailRes.json();
+                const subject = details.payload.headers.find(h => h.name === 'Subject')?.value || "No Subject";
+                listDiv.innerHTML += `<div class="bg-white p-4 rounded-xl shadow-sm border mb-2" onclick="openAndReadEmail(${i})"><span class="text-xs font-bold text-blue-500 uppercase">Mail ${i+1}</span><h3 class="font-bold text-gray-800">${subject}</h3></div>`;
+            }
+        } catch (err) { }
+    }
+
+    async function openAndReadEmail(index) {
+        if (!currentEmailList[index]) return;
+        const messageId = currentEmailList[index].id;
+        const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`, {
+            headers: { 'Authorization': `Bearer ${GMAIL_TOKEN}` }
+        });
+        const details = await res.json();
+        const subject = details.payload.headers.find(h => h.name === 'Subject')?.value || "No Subject";
+        document.getElementById('main-content').innerHTML = `<div class="p-8 bg-blue-50 border-2 border-blue-200 rounded-2xl"><h1 class="text-2xl font-bold">${subject}</h1><p class="mt-4">${details.snippet}</p></div>`;
+        speak(`Opening email ${index + 1}. The subject is ${subject}. The message says: ${details.snippet}`);
+    }
+
+    function resetCompose() {
+        document.getElementById('to').value = ""; document.getElementById('subject').value = ""; document.getElementById('body').value = "";
+        composeState = "awaiting_recipient"; speak("Form cleared. Please state the recipient.");
+    }
+
+    async function handleSend() {
+        const to = document.getElementById('to').value;
+        const sub = document.getElementById('subject').value;
+        const body = document.getElementById('body').value;
+        const email = [`To: ${to}`, `Subject: ${sub}`, '', body].join('\n');
+        const encodedEmail = btoa(unescape(encodeURIComponent(email))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${GMAIL_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ raw: encodedEmail })
+        });
+        if (res.ok) { composeState = "idle"; speak("Email successfully transmitted."); loadContent('sent'); }
+    }
+
+    function speak(text) {
+        recognition.stop(); 
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.onend = () => { recognition.start(); updateStatus(true); };
+        synth.speak(utter);
+    }
+
+    function updateStatus(isListening) {
+        const icon = document.getElementById('mic-icon');
+        const text = document.getElementById('status-text');
+        if(isListening) { icon.classList.add('mic-active'); text.innerText = "Listening..."; }
+        else { icon.classList.remove('mic-active'); text.innerText = "Speaking..."; }
+    }
+
+    function loadContent(view) {
+        document.getElementById('main-content').innerHTML = templates[view];
+        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active-link'));
+        const activeBtn = document.getElementById(`btn-${view}`);
+        if(activeBtn) activeBtn.classList.add('active-link');
+        if (view === 'telegram') fetchTelegramMessages();
+        else if (view !== 'compose') fetchGmailData(view);
+    }
+
+    function logout() { localStorage.removeItem('gmail_token'); speak("Terminating session. Goodbye."); setTimeout(() => window.location.href = 'index.html', 1500); }
+
+    setInterval(fetchTelegramMessages, 8000);
+
+    window.onload = () => {
+        const user = JSON.parse(localStorage.getItem('user')) || { username: 'Authorized User' };
+        document.getElementById('user-display').innerText = user.username;
+        speak("Voice dashboard active. System standing by.");
+        loadContent('inbox');
+    };
+</script>
+
+
+
+  -->
+
+
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Voice Email Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Matches the indigo-600 used in your login page */
+        .active-link { background: #4f46e5 !important; color: white !important; border-radius: 12px; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4); }
+        .mic-active { color: #f87171; filter: drop-shadow(0 0 8px #ef4444); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .nav-btn { transition: all 0.2s ease-in-out; border-radius: 12px; }
+        
+        /* Dark Theme Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        /* Glass effect for containers */
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+    </style>
+
+    <div id="scanner-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; flex-direction:column; align-items:center; justify-content:center;">
+    <div style="position:relative; width:300px; height:300px; border-radius:50%; border:5px solid #00d4ff; overflow:hidden; box-shadow: 0 0 30px #00d4ff;">
+        <video id="auth-video" width="300" height="300" autoplay style="object-fit:cover; transform: scaleX(-1);"></video>
+        <div class="scan-line"></div>
+    </div>
+    <h2 id="scan-status" style="color:white; margin-top:20px; font-family:sans-serif;">Authenticating...</h2>
+    <canvas id="auth-canvas" style="display:none;"></canvas>
+</div>
+
+<style>
+.scan-line {
+    position:absolute; top:0; left:0; width:100%; height:4px; background:#00d4ff; 
+    box-shadow:0 0 15px #00d4ff; animation: scan-anim 2s infinite ease-in-out;
+}
+@keyframes scan-anim { 0%, 100% { top: 0%; } 50% { top: 100%; } }
+</style>
+
+
+</head>
+<body class="bg-[#0f172a] text-slate-200 flex h-screen overflow-hidden">
+
+    <aside class="w-64 bg-[#1e293b]/50 border-r border-slate-800 flex flex-col p-6 backdrop-blur-xl">
+        <div class="flex items-center gap-3 mb-10 px-2">
+            <div class="bg-indigo-600 p-2 rounded-lg text-white shadow-lg shadow-indigo-900/20">
+                <i class="fa-solid fa-envelope"></i>
+            </div>
+            <h1 class="font-bold text-xl text-white tracking-tight">VAANI</h1>
+        </div>
+        
+        <nav class="flex-grow space-y-2">
+            <button onclick="loadContent('inbox')" id="btn-inbox" class="nav-btn w-full flex items-center gap-4 p-4 text-slate-400 hover:bg-indigo-500/10 hover:text-indigo-400 active-link">
+                <i class="fa-solid fa-inbox w-5"></i> <span>Inbox</span>
+            </button>
+            <button onclick="loadContent('compose')" id="btn-compose" class="nav-btn w-full flex items-center gap-4 p-4 text-slate-400 hover:bg-indigo-500/10 hover:text-indigo-400">
+                <i class="fa-solid fa-pen-to-square w-5"></i> <span>Compose</span>
+            </button>
+
+             <button onclick="loadContent('telegram')" id="btn-telegram" class="nav-btn w-full flex items-center gap-4 p-4 text-slate-400 hover:bg-indigo-500/10 hover:text-indigo-400">
+                <i class="fa-brands fa-telegram w-5"></i> <span>Telegram</span>
+            </button>
+
+            <button onclick="loadContent('sent')" id="btn-sent" class="nav-btn w-full flex items-center gap-4 p-4 text-slate-400 hover:bg-indigo-500/10 hover:text-indigo-400">
+                <i class="fa-solid fa-paper-plane w-5"></i> <span>Sent</span>
+            </button>
+            <button onclick="loadContent('trash')" id="btn-trash" class="nav-btn w-full flex items-center gap-4 p-4 text-slate-400 hover:bg-indigo-500/10 hover:text-indigo-400">
+                <i class="fa-solid fa-trash w-5"></i> <span>Trash</span>
+            </button>
+        </nav>
+
+        <button onclick="logout()" class="nav-btn w-full flex items-center gap-4 p-4 text-rose-400 hover:bg-rose-500/10 mt-auto transition-colors">
+            <i class="fa-solid fa-right-from-bracket w-5"></i> <span>Logout</span>
+        </button>
+    </aside>
+
+    <main class="flex-grow flex flex-col">
+        <header class="h-16 bg-[#1e293b]/80 border-b border-slate-800 flex items-center justify-between px-8 backdrop-blur-md">
+            <div class="flex items-center gap-3">
+                <i id="mic-icon" class="fa-solid fa-microphone text-slate-600 transition-all duration-300"></i>
+                <span id="status-text" class="text-sm font-medium text-slate-500 uppercase tracking-widest">System Ready</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="user-display" class="text-sm font-bold text-slate-300 uppercase tracking-wider">User</span>
+                <div class="w-9 h-9 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
+                    <i class="fa-solid fa-user text-indigo-400 text-xs"></i>
+                </div>
+            </div>
+        </header>
+
+        <section id="main-content" class="p-8 overflow-y-auto">
+            </section>
+    </main>
+<script>
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    const synth = window.speechSynthesis;
+    recognition.continuous = true;
+    recognition.lang = 'en-US';
+
+    const GMAIL_TOKEN = localStorage.getItem('gmail_token');
+
+    //const TELEGRAM_TOKEN = '8134338978:AAEvp61dDpQ7OFUmu4moyX55EOVNKnZ14F0';
+    const DEMO_GROUP_ID = "-5247206828";
+    const API_URL = "http://localhost:3000";
+    
+    let lastUpdateId = 0;
+    let tgState = "idle"; 
+    let tgTempDraft = "";
+    let messageQueue = []; 
+    let queueIndex = 0;    
+    let lastIncomingMsg = ""; 
+    let isSleeping = false;
+
+
+    let currentLang = 'en-US'; // Default
+    
+
+
+    let currentEmailList = []; 
+    let composeState = "idle"; 
+    let tempValue = ""; 
+
+
+    // --- NEW: AI SUGGESTION GLOBALS ---
+    window.currentSuggestions = [];
+
+    // Updated templates with Dark Theme UI
+    const templates = {
+        inbox: `<h2 class="text-2xl font-bold text-white mb-6">Inbox</h2><div id="mail-list" class="space-y-3">Loading secure emails...</div>`,
+        compose: `<h2 class="text-2xl font-bold text-white mb-6 tracking-tight">Compose Formal Mail</h2>
+                  <div class="p-8 bg-slate-900/50 rounded-[2rem] border border-slate-800 space-y-5 shadow-2xl">
+                      <input type="email" id="to" placeholder="Recipient Gmail" class="w-full p-4 bg-slate-950 border border-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-200 transition-all">
+                      <input type="text" id="subject" placeholder="Subject" class="w-full p-4 bg-slate-950 border border-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-200 transition-all">
+                      <textarea id="body" placeholder="Message content..." class="w-full p-4 bg-slate-950 border border-slate-800 rounded-xl h-48 outline-none focus:ring-2 focus:ring-indigo-500 text-slate-200 transition-all"></textarea>
+                      <div class="flex gap-4 pt-2">
+                        <button onclick="handleSend()" class="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-900/20 transition-all">Send Email</button>
+                        <button onclick="resetCompose()" class="bg-slate-800 text-slate-300 px-8 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all">Reset</button>
+                      </div>
+                  </div>`,
+        sent: `<h2 class="text-2xl font-bold text-white mb-6">Sent Messages</h2><div id="mail-list" class="space-y-3">Syncing...</div>`,
+        trash: `<h2 class="text-2xl font-bold text-rose-400 mb-6">Trash Bin</h2><div id="mail-list" class="space-y-3">Loading...</div>`,
+        telegram: `<h2 class="text-2xl font-bold text-indigo-400 mb-6">Telegram Module</h2>
+                   <div id="telegram-list" class="space-y-3 max-h-[400px] overflow-y-auto">Establishing secure link...</div>
+                   <div id="tg-reply-bar" class="mt-8 p-6 bg-indigo-950/30 border border-indigo-500/20 rounded-3xl shadow-2xl backdrop-blur-md">
+                        <div class="flex items-center gap-3 mb-2">
+                            <div id="tg-status-dot" class="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                            <span id="tg-status-text" class="text-xs font-bold text-indigo-400 uppercase tracking-tighter">Voice Assistant Active</span>
+                        </div>
+                        <div id="tg-draft-display" class="p-4 bg-slate-950/50 rounded-xl border border-slate-800 text-slate-400 italic min-h-[60px] text-sm">
+                            Waiting for incoming voice commands...
+                        </div>
+                   </div>`
+    };
+
+
+  
+
+async function performBiometricAuth(successCallback) {
+    const overlay = document.getElementById('scanner-overlay');
+    const video = document.getElementById('auth-video');
+    const canvas = document.getElementById('auth-canvas');
+    const status = document.getElementById('scan-status');
+
+    overlay.style.display = 'flex';
+    status.innerText = "Align your face in the circle...";
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+
+        setTimeout(async () => {
+            // MATCH RESOLUTION: Same as index.html
+            canvas.width = video.videoWidth; 
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const capturedFace = canvas.toDataURL('image/png');
+            stream.getTracks().forEach(track => track.stop());
+            overlay.style.display = 'none';
+
+            const userData = JSON.parse(localStorage.getItem('user'));
+            if (!userData) { speak("Session lost. Login again."); return; }
+
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: userData.username,
+                    password: userData.password,
+                    faceData: capturedFace
+                })
+            });
+
+            if (res.ok) {
+                speak("Identity verified.");
+                successCallback(); // Triggers handleSend() or Telegram send
+            } else {
+                speak("Face mismatch. Action blocked.");
+            }
+        }, 4000); // 2 second auto-scan
+    } catch (err) {
+        overlay.style.display = 'none';
+        speak("Camera error.");
+    }
+}
+
+
+    // --- NEW: AI SUGGESTION FUNCTIONS ---
+    async function getAISuggestions(messageContent) {
+        speak("Consulting AI for smart replies. Please stand by.");
+        try {
+           // const response = await fetch('http://localhost:3000/api/suggest-replies', {
+           const response = await fetch(`${API_URL}/api/suggest-replies`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    context: messageContent,
+                    lang: currentLang // This tells server.js which language to use
+                 })
+            });
+            const data = await response.json();
+            if (data.suggestions) {
+                // Split by newline and clean numbers
+                window.currentSuggestions = data.suggestions.split('\n')//Breaks the big text into individual lines
+                    .map(s => s.replace(/^\d+\.\s*/, "").trim())//removes the numbers (like "1. ")
+                    .filter(s => s.length > 0)
+                    .slice(0, 3);//ensures we only have exactly 3 options.
+
+                speak("I have three suggestions.");
+                window.currentSuggestions.forEach((opt, i) => speak(`Option ${i + 1}: ${opt}`));
+                speak("Which option would you like to use? You can also say repeat.");
+                tgState = "WAITING_SUGGESTION_SELECT";
+            } else {
+                speak("I could not generate suggestions. Please dictate manually.");
+                tgState = "awaiting_msg";
+            }
+        } catch (err) {
+            speak("AI connection error. Please dictate manually.");
+            tgState = "awaiting_msg";
+        }
+    }
+
+    function repeatSuggestions() {
+        speak("Repeating your options.");
+        window.currentSuggestions.forEach((opt, i) => speak(`Option ${i + 1}: ${opt}`));
+        speak("Which one shall I send?");
+    }
+
+
+
+
+
+
+    // --- TELEGRAM LOGIC ---
+    async function fetchTelegramMessages() {
+        const listDiv = document.getElementById('telegram-list');
+        if (!listDiv || tgState !== "idle") return; 
+
+        try {
+            //const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?offset=${lastUpdateId + 1}`);
+            const res = await fetch(`${API_URL}/api/telegram-fetch?offset=${lastUpdateId + 1}`);
+            const data = await res.json();
+
+            if (data.result && data.result.length > 0) {
+                messageQueue = []; 
+                queueIndex = 0;
+
+                data.result.forEach(update => {
+                    lastUpdateId = update.update_id;
+                    const msg = update.message;
+                    if (!msg || !msg.text) return;
+
+                    messageQueue.push({ sender: msg.from.first_name, text: msg.text });
+
+                    // Visual UI update with Dark Theme cards
+                    listDiv.innerHTML = `
+                        <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700/50 mb-2 hover:bg-slate-800/60 transition-colors">
+                            <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">From: ${msg.from.first_name}</span>
+                            <p class="text-slate-200 mt-1">${msg.text}</p>
+                        </div>` + listDiv.innerHTML;
+                });
+
+                tgState = "WAITING_FOR_READ_PERMISSION";
+                speak(`You have ${messageQueue.length} new messages. Would you like to hear them?`);
+            }
+        } catch (err) { console.error("Telegram Sync Error:", err); }
+    }
+
+    function processNextMessage() {
+        if (queueIndex < messageQueue.length) {
+            const currentMsg = messageQueue[queueIndex];
+            lastIncomingMsg = currentMsg.text; 
+            tgState = "WAITING_FOR_REPLY_PERMISSION";
+            speak(`Message ${queueIndex + 1} from ${currentMsg.sender} says: ${currentMsg.text}. Would you like to reply?`);
+        } else {
+            tgState = "idle";
+            speak("All new messages have been processed. Returning to standby.");
+        }
+    }
+
+    async function sendTelegramMessage(chatId, text) {
+        try {
+            //await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+            await fetch(`${API_URL}/api/telegram-send`, {    
+            method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+             //body: JSON.stringify({ chat_id: chatId, text: text })
+              body: JSON.stringify({ chatId: chatId, text: text })
+            });
+            speak("Your message has been successfully transmitted.");
+            queueIndex++;
+            setTimeout(processNextMessage, 1000);
+        } catch (err) { speak("Failed to send message."); }
+    }
+
+    // --- VOICE RECOGNITION RESULTS ---
+    recognition.onresult = (event) => {
+        const cmd = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+        const draftDisplay = document.getElementById('tg-draft-display');
+
+
+        // --- 1. INSERT SLEEP MODE LOGIC HERE (THE TOP) ---
+    if (isSleeping) {
+        if (cmd.includes("wake up") || cmd.includes("assistant")) {
+            isSleeping = false;
+            speak("I am awake and ready. How can I help you?");
+        }
+        return; // Ignore everything else while sleeping
+    }
+
+    // 2. Command to put the system to sleep
+    if (cmd.includes("go to sleep") || cmd.includes("sleep mode")) {
+        isSleeping = true;
+        speak("I am going to sleep now. Just say wake up if you need me.");
+        return;
+    }
+
+
+
+
+
+        if (cmd.includes("switch to hindi") || cmd.includes("हिंदी में बदलो")) {
+    currentLang = 'hi-IN';
+    speak("भाषा अब हिंदी है।");
+    return;
+       }
+      if (cmd.includes("switch to telugu") || cmd.includes("తెలుగులోకి మార్చు")) {
+    currentLang = 'te-IN';
+    speak("భాష ఇప్పుడు తెలుగు.");
+    return;
+      }
+
+
+
+
+        // --- NEW: AI GMAIL SUMMARIZATION COMMAND ---
+        if (cmd.includes("summarize email") || cmd.includes("summary")) {
+            const emailBody = document.querySelector('#main-content p');
+            const textToProcess = emailBody ? emailBody.innerText : "";
+
+            if (!textToProcess) {
+                speak("I apologize, but there is no email content currently open to summarize.");
+                return;
+            }
+
+            speak("Consulting AI for a brief summary. Please stand by.");
+
+           // fetch('http://localhost:3000/api/summarize-email', {
+              fetch(`${API_URL}/api/summarize-email`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emailContent: textToProcess })
+            })
+            .then(res => res.json())
+            .then(data => {
+                speak(`Summary: ${data.summary}`);
+            })
+            .catch(err => {
+                console.error(err);
+                speak("I encountered an error while attempting to generate the summary.");
+            });
+            return;
+        }
+
+
+
+       // --- MERGED TELEGRAM LOGIC ---
+        if (tgState === "WAITING_FOR_READ_PERMISSION") {
+            if (cmd.includes("yes")) { processNextMessage(); } 
+            else { tgState = "idle"; speak("Messages remain unread."); }
+            return;
+        }
+
+        if (tgState === "WAITING_FOR_REPLY_PERMISSION") {
+            if (cmd.includes("yes") || cmd.includes("reply")) { 
+                tgState = "WAITING_REPLY_METHOD"; 
+                speak("Would you like to compose manually or use AI suggestions?"); 
+            } 
+            else { queueIndex++; processNextMessage(); }
+            return;
+        }
+        if (tgState === "WAITING_REPLY_METHOD") {
+            if (cmd.includes("manual")) { tgState = "awaiting_msg"; speak("Dictate your reply."); }
+            else if (cmd.includes("suggestion") || cmd.includes("ai")) {
+             getAISuggestions(lastIncomingMsg); }
+            return;
+        }
+
+        if (tgState === "WAITING_SUGGESTION_SELECT") {
+            if (cmd.includes("repeat") || cmd.includes("again")) { repeatSuggestions(); return; }
+            const numMap = { "one": 0, "1": 0, "two": 1, "2": 1, "three": 2, "3": 2 };
+            for (let word in numMap) {
+                if (cmd.includes(word)) {
+                    tgTempDraft = window.currentSuggestions[numMap[word]];
+                    tgState = "final_confirm";
+                    speak(`Option selected: ${tgTempDraft}. Should I send it?`);
+                    return;
+                }
+            }
+        }
+
+
+
+        if (tgState === "awaiting_msg") {
+            tgTempDraft = cmd;
+            tgState = "verifying";
+            speak(`I heard: ${tgTempDraft}. Is this correct?`);
+            if(draftDisplay) draftDisplay.innerText = `Drafting: "${tgTempDraft}"`;
+            return;
+        }
+
+        if (tgState === "verifying") {
+            if (cmd.includes("yes")) { tgState = "final_confirm"; speak("Message verified. Shall I send it to the group now?"); } 
+            else { tgState = "awaiting_msg"; speak("I apologize. Please repeat your message."); }
+            return;
+        }
+
+        if (tgState === "final_confirm" && (cmd.includes("yes") || cmd.includes("send"))) {
+             speak("Authenticating your face for Telegram.");
+             performBiometricAuth(() => {
+             sendTelegramMessage(DEMO_GROUP_ID, tgTempDraft);
+            tgState = "idle";
+          });
+        }
+            else if (tgState === "final_confirm") {
+                speak("Message discarded.");
+                queueIndex++;
+                processNextMessage();
+                return;
+            }
+       // if (tgState === "final_confirm") {
+         //   if (cmd.includes("yes")) { sendTelegramMessage(DEMO_GROUP_ID, tgTempDraft); } 
+           // else { speak("Message discarded."); queueIndex++; processNextMessage(); }
+           // return;
+       // }
+
+        if (cmd.includes("reply") && tgState === "idle") {
+            tgState = "awaiting_msg";
+            speak("Please dictate your message.");
+            return;
+        }
+
+        if (cmd.includes("inbox")) { composeState = "idle"; loadContent('inbox'); speak("Opening inbox. You can say open email one or open email two and so on for listening email"); return; }
+        if (cmd.includes("sent")) { composeState = "idle"; loadContent('sent'); speak("Viewing sent messages."); return; }
+        if (cmd.includes("trash")) { composeState = "idle"; loadContent('trash'); speak("Opening trash."); return; }
+        if (cmd.includes("telegram") || cmd.includes("message")) { loadContent('telegram'); speak("Displaying Telegram interface."); return; }
+        if (cmd.includes("logout")) { logout(); return; }
+
+        if (cmd.includes("compose") && composeState === "idle") {
+            loadContent('compose');
+            composeState = "confirm_start";
+            speak("Opening compose box. Do you wish to compose a new email yes or No ?");
+            return;
+        }
+
+        if (composeState === "confirm_start") {
+            if (cmd.includes("yes")) { composeState = "awaiting_recipient"; speak("Please state the recipient's email address."); }
+            else { composeState = "idle"; loadContent('inbox'); speak("Returning to inbox."); }
+            return;
+        }
+
+        if (composeState === "awaiting_recipient") { tempValue = cmd.replace(/\s/g, '').replace('at', '@'); composeState = "verifying_recipient"; speak(`I heard ${tempValue}. Is this correct?`); return; }
+        if (composeState === "verifying_recipient") { if (cmd.includes("yes")) { document.getElementById('to').value = tempValue; composeState = "awaiting_subject"; speak("Recipient saved. Please state the subject."); } else { composeState = "awaiting_recipient"; speak("Please repeat the address."); } return; }
+        if (composeState === "awaiting_subject") { tempValue = cmd; composeState = "verifying_subject"; speak(`The subject is ${tempValue}. Is this correct?`); return; }
+        if (composeState === "verifying_subject") { if (cmd.includes("yes")) { document.getElementById('subject').value = tempValue; composeState = "awaiting_body"; speak("Subject saved. Please dictate your message."); } else { composeState = "awaiting_subject"; speak("Please repeat the subject."); } return; }
+        if (composeState === "awaiting_body") { tempValue = cmd; composeState = "verifying_body"; speak(`Your message is: ${tempValue}. Should I add this?`); return; }
+        if (composeState === "verifying_body") { if (cmd.includes("yes")) { document.getElementById('body').value = tempValue; composeState = "ready_to_send"; speak("Message prepared. Say 'Send email' to finalize."); } else { composeState = "awaiting_body"; speak("Please repeat the message."); } return; }
+        //if (cmd.includes("send email") && composeState === "ready_to_send") { handleSend(); return; }
+
+        if (cmd.includes("send email") && composeState === "ready_to_send") {
+         speak("Initiating biometric scan for email authorization.");
+    
+        // Pass handleSend as the 'successCallback'
+         performBiometricAuth(() => {
+                handleSend(); // This only runs if the face matches!
+                composeState = "idle"; // Reset the state after sending
+         });
+    
+       return;
+      }
+        if (cmd.includes("reset")) { resetCompose(); return; }
+
+        const numberMap = { "one": 0, "1": 0, "two": 1, "2": 1, "three": 2, "3": 2, "four": 3, "4": 3, "five": 4, "5": 4 };
+        for (let word in numberMap) {
+            if (cmd.includes(`email ${word}`) || cmd.includes(`mail ${word}`)) {
+                openAndReadEmail(numberMap[word]);
+                return;
+            }
+        }
+    };
+
+    // Updated fetch with Dark Theme card styles
+    async function fetchGmailData(label) {
+        const listDiv = document.getElementById('mail-list');
+        if (!GMAIL_TOKEN) return;
+        try {
+            const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=${label.toUpperCase()}&maxResults=5`, {
+                headers: { 'Authorization': `Bearer ${GMAIL_TOKEN}` }
+            });
+            const data = await res.json();
+            currentEmailList = data.messages || []; 
+            listDiv.innerHTML = "";
+            for (let i = 0; i < currentEmailList.length; i++) {
+                const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${currentEmailList[i].id}`, {
+                    headers: { 'Authorization': `Bearer ${GMAIL_TOKEN}` }
+                });
+                const details = await detailRes.json();
+                const subject = details.payload.headers.find(h => h.name === 'Subject')?.value || "No Subject";
+                listDiv.innerHTML += `
+                    <div class="bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50 mb-2 cursor-pointer hover:bg-slate-800/80 transition-all" onclick="openAndReadEmail(${i})">
+                        <span class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Mail ${i+1}</span>
+                        <h3 class="font-bold text-slate-200 mt-1">${subject}</h3>
+                    </div>`;
+            }
+        } catch (err) { }
+    }
+
+    async function openAndReadEmail(index) {
+        if (!currentEmailList[index]) return;
+        const messageId = currentEmailList[index].id;
+        const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`, {
+            headers: { 'Authorization': `Bearer ${GMAIL_TOKEN}` }
+        });
+        const details = await res.json();
+        const subject = details.payload.headers.find(h => h.name === 'Subject')?.value || "No Subject";
+        document.getElementById('main-content').innerHTML = `
+            <div class="p-10 bg-slate-900/50 border border-slate-800 rounded-[2rem] shadow-2xl backdrop-blur-md">
+                <h1 class="text-3xl font-bold text-white mb-4 tracking-tight">${subject}</h1>
+                <p class="mt-4 text-slate-400 leading-relaxed text-lg">${details.snippet}</p>
+                <button onclick="loadContent('inbox')" class="mt-8 text-indigo-400 font-bold hover:text-indigo-300">← Back to Inbox</button>
+            </div>`;
+        speak(`Opening email ${index + 1}. The subject is ${subject}. The message says: ${details.snippet}`);
+    }
+
+    function resetCompose() {
+        document.getElementById('to').value = ""; document.getElementById('subject').value = ""; document.getElementById('body').value = "";
+        composeState = "awaiting_recipient"; speak("Form cleared. Please state the recipient.");
+    }
+
+    async function handleSend() {
+        const to = document.getElementById('to').value;
+        const sub = document.getElementById('subject').value;
+        const body = document.getElementById('body').value;
+        const email = [`To: ${to}`, `Subject: ${sub}`, '', body].join('\n');
+        const encodedEmail = btoa(unescape(encodeURIComponent(email))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${GMAIL_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ raw: encodedEmail })
+        });
+        if (res.ok) { composeState = "idle"; speak("Email successfully transmitted."); loadContent('sent'); }
+    }
+
+    //function speak(text) {
+      //  recognition.stop(); 
+       // const utter = new SpeechSynthesisUtterance(text);
+       // utter.onend = () => { recognition.start(); updateStatus(true); };
+       // synth.speak(utter);
+    //}
+        function speak(text) {
+    // 1. Force the microphone to stop immediately so it doesn't hear the first word
+    recognition.stop(); 
+    
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = currentLang; 
+
+    utter.onend = () => { 
+        // 2. IMPORTANT: A small 300ms delay gives the hardware time to switch 
+        // from "Speaker Mode" back to "Microphone Mode"
+        setTimeout(() => {
+            recognition.lang = currentLang; 
+            
+            // 3. Safety Check: If it's already running, don't crash. 
+            // If it's off, force it back on.
+            try {
+                recognition.start();
+                console.log("🎤 Microphone re-activated successfully.");
+            } catch (err) {
+                // If it fails (e.g., 'already started'), we catch it here
+                console.warn("Mic restart handled:", err.message);
+            }
+        }, 300); 
+    };
+
+    // 4. Emergency Backup: If the speech engine hangs or fails, 
+    // we still need the mic to come back on.
+    utter.onerror = (event) => {
+        console.error("Speech Error:", event.error);
+        recognition.start();
+    };
+
+    synth.speak(utter);
+}
+  
+    function updateStatus(isListening) {
+        const icon = document.getElementById('mic-icon');
+        const text = document.getElementById('status-text');
+        if(isListening) { icon.classList.add('mic-active'); text.innerText = "Listening..."; }
+        else { icon.classList.remove('mic-active'); text.innerText = "Speaking..."; }
+    }
+
+    function loadContent(view) {
+        document.getElementById('main-content').innerHTML = templates[view];
+        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active-link'));
+        const activeBtn = document.getElementById(`btn-${view}`);
+        if(activeBtn) activeBtn.classList.add('active-link');
+        if (view === 'telegram') fetchTelegramMessages();
+        else if (view !== 'compose') fetchGmailData(view);
+    }
+
+    function logout() { localStorage.removeItem('gmail_token'); speak("Terminating session. Goodbye."); setTimeout(() => window.location.href = 'index.html', 1500); }
+
+    setInterval(fetchTelegramMessages, 8000);
+
+    window.onload = () => {
+        const user = JSON.parse(localStorage.getItem('user')) || { username: 'Authorized User' };
+        document.getElementById('user-display').innerText = user.username;
+        speak("Voice dashboard active. System standing by. You can say inbox, compose, sent, trash, telegram, or log out to navigate.");
+        loadContent('inbox');
+    };
+</script>
+</body>
+</html> 
+

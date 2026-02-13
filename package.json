@@ -1,0 +1,19 @@
+{
+  "name": "email",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.4",
+    "drizzle-orm": "^0.30.1",
+    "express": "^4.18.2",
+    "google-auth-library": "^10.5.0",
+    "googleapis": "^170.0.0",
+    "mysql2": "^3.9.2"
+  }
+}

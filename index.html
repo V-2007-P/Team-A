@@ -1,0 +1,413 @@
+<!-- 
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bio-Secure System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        .scan-anim { height: 4px; background: #60a5fa; width: 100%; position: absolute; top: 0; box-shadow: 0 0 20px #3b82f6; animation: move 2.5s infinite ease-in-out; z-index: 30; }
+        @keyframes move { 0%, 100% { top: 5%; } 50% { top: 95%; } }
+        .hidden-section { display: none; }
+        .success-circle { animation: scaleUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes scaleUp { from { transform: scale(0); } to { transform: scale(1); } }
+    </style>
+</head>
+<body class="bg-slate-50 flex items-center justify-center min-h-screen p-4">
+
+    <div id="loginPage" class="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-md   border border-gray-100 text-center transition-all duration-500">
+        <div class="mb-8">
+            <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center  mx-auto mb-4 shadow-lg shadow-blue-200">
+                <i class="fa-solid fa-fingerprint text-white text-3xl"></i>
+            </div>
+            <h1 class="text-3xl font-black text-gray-900">Secure Entry</h1>
+            <p class="text-gray-500 mt-1">Sign in to your account</p>
+        </div>
+
+        <div id="g_id_onload" data-client_id="469366699172-hkt9smmopdlai9j5fidv82kofdl6hbdo.apps.googleusercontent.com" 
+        data-callback="handleGoogle"></div>
+        <div class="g_id_signin mb-6 flex justify-center" data-type="standard" data-shape="pill"></div>
+
+        <div class="flex items-center my-6">
+            <hr class="flex-grow border-gray-100"> 
+            <span class="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Manual Login</span> 
+            <hr class="flex-grow border-gray-100">
+        </div>
+
+        <form id="loginForm" class="space-y-4">
+            <input type="text" id="lUser" placeholder="Username" required class="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+            <input type="password" id="lPass" placeholder="Password" required class="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 shadow-xl shadow-blue-100 active:scale-95 transition-all">Login & Verify</button>
+        </form>
+
+        <p class="mt-8 text-sm text-gray-500">First time here?
+             <button onclick="showStep('regPage')" class="text-blue-600 font-bold hover:underline">Register Now</button>
+        </p>
+    </div>
+
+    <div id="regPage" class="hidden-section bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md text-center  border border-gray-100">
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Create Account</h2>
+        <p class="text-gray-500 mb-8">Set your security credentials</p>
+        <form id="regForm" class="space-y-4 text-left">
+            <div>
+                <label class="text-xs font-bold text-gray-400 ml-2 uppercase">Username</label>
+                <input type="text" id="rUser" required class="w-full mt-1 p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="text-xs font-bold text-gray-400 ml-2 uppercase">Gmail Address</label>
+                <input type="email" id="rEmail" required placeholder="example@gmail.com" class="w-full mt-1 p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="text-xs font-bold text-gray-400 ml-2 uppercase">Password</label>
+                <input type="password" id="rPass" required class="w-full mt-1 p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button type="submit" class="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl mt-4 hover:shadow-lg transition-all">Next: Photo Enrollment</button>
+        </form>
+    </div>
+
+    <div id="bioPage" class="hidden-section bg-slate-950 p-10 rounded-[3rem] shadow-2xl w-full max-w-md text-center text-white relative">
+        <h2 id="bioTitle" class="text-2xl font-bold mb-1">Face Scanner</h2>
+        <div class="relative w-64 h-64 mx-auto mb-10 group mt-8">
+            <div class="w-full h-full rounded-full overflow-hidden border-4 border-blue-500 bg-black relative">
+                <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
+                <canvas id="canvas" class="hidden"></canvas>
+                <div id="scannerLine" class="scan-anim"></div>
+            </div>
+        </div>
+        <button id="bioBtn" onclick="handleBiometricCapture()" class="w-full bg-blue-600 text-white font-black py-5 rounded-2xl hover:bg-blue-500 transition-all">
+            <span id="btnText">Capture Photo</span>
+        </button>
+    </div>
+
+    <script>
+        let currentMode = "enroll"; 
+        let stream = null;
+        let tokenClient; // New variable for Gmail token
+        const API_URL = "http://localhost:3000";
+
+
+        window.onload = function () {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: "469366699172-hkt9smmopdlai9j5fidv82kofdl6hbdo.apps.googleusercontent.com",
+                scope: "https://www.googleapis.com/auth/gmail.modify", // Permission for Inbox, Sent, Trash
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        // Store token for dashboard use
+                        localStorage.setItem('gmail_token', tokenResponse.access_token);
+                        
+                        // Proceed to your existing Biometric UI
+                        currentMode = "verify";
+                        showStep('bioPage');
+                        initCamera();
+                    }
+                },
+            });
+        };
+
+        // 2. Updated handleGoogle to request access token
+        function handleGoogle(response) {
+            // Get user info from the initial sign-in
+            const payload = JSON.parse(atob(response.credential.split('.')[1]));
+            document.getElementById('lUser').value = payload.email;
+            document.getElementById('lPass').value = "GOOGLE_AUTH_USER";
+
+            // Trigger the Gmail permission popup
+            tokenClient.requestAccessToken();
+            
+            alert("Google Identity Confirmed. Please grant Gmail access to continue to Biometrics.");
+        }
+
+
+
+
+        function showStep(id) {
+            document.querySelectorAll('body > div').forEach(div => div.classList.add('hidden-section'));
+            document.getElementById(id).classList.remove('hidden-section');
+        }
+
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('video').srcObject = stream;
+            } catch (e) { alert("Camera error."); }
+        }
+
+        document.getElementById('regForm').onsubmit = (e) => {
+            e.preventDefault();
+            currentMode = "enroll";
+            showStep('bioPage');
+            initCamera();
+        };
+
+        document.getElementById('loginForm').onsubmit = (e) => {
+            e.preventDefault();
+            currentMode = "verify";
+            showStep('bioPage');
+            initCamera();
+        };
+
+        async function handleBiometricCapture() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/png');
+
+            const endpoint = currentMode === "enroll" ? "/register" : "/login";
+            
+            // PREPARE DATA WITH EMAIL
+            const bodyData = {
+                username: currentMode === "enroll" ? document.getElementById('rUser').value : document.getElementById('lUser').value,
+                password: currentMode === "enroll" ? document.getElementById('rPass').value : document.getElementById('lPass').value,
+                faceData: imageData
+            };
+
+            // ADD EMAIL ONLY IF ENROLLING
+            if (currentMode === "enroll") {
+                bodyData.email = document.getElementById('rEmail').value;
+            }
+
+            try {
+                const res = await fetch(API_URL + endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bodyData)
+                });
+
+                if (res.ok) {
+                   if (currentMode === "enroll") {
+                        // REGISTRATION LOGIC: Show success and stay on page to login
+                        alert("Registration Successful! Please enter your username and password to login.");
+                        location.reload(); // Refresh to clear the camera and return to Login form
+                    } else {
+                        // LOGIN LOGIC: Go to dashboard
+                        alert("Login Successful! Redirecting...");
+                        window.location.href = "voice1.html"; 
+                    }
+                } else {
+                    alert("Action failed. Check server/database.");
+                }
+            } catch (err) { alert("Server Down!"); }
+        }
+       
+    </script>
+</body>
+</html> 
+
+
+  -->
+
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bio-Secure System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <style>
+        body { background-attachment: fixed; }
+        button { letter-spacing: 0.5px; }
+        input::placeholder { letter-spacing: 0.5px; }
+
+        .scan-anim { 
+            height: 4px; 
+            background: linear-gradient(90deg, transparent, #22d3ee, transparent);
+            width: 100%; 
+            position: absolute; 
+            top: 0; 
+            box-shadow: 0 0 20px #22d3ee; 
+            animation: move 2.5s infinite ease-in-out; 
+            z-index: 30; 
+        }
+        @keyframes move { 0%, 100% { top: 5%; } 50% { top: 95%; } }
+
+        .hidden-section { display: none; }
+        .success-circle { animation: scaleUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes scaleUp { from { transform: scale(0); } to { transform: scale(1); } }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-black via-slate-900 to-slate-950 flex items-center justify-center min-h-screen p-4 font-sans">
+
+    <!-- LOGIN PAGE -->
+    <div id="loginPage" class="bg-white/5 backdrop-blur-2xl p-8 rounded-[2.5rem] shadow-[0_0_60px_rgba(56,189,248,0.25)] w-full max-w-md border border-white/10 text-center transition-all duration-500">
+        <div class="mb-8">
+            <div class="w-16 h-16 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[0_0_30px_rgba(56,189,248,0.6)]">
+                <i class="fa-solid fa-fingerprint text-white text-3xl"></i>
+            </div>
+            <h1 class="text-3xl font-black text-white tracking-wide">Secure Entry</h1>
+            <p class="text-slate-400 mt-1">Sign in to your account</p>
+        </div>
+
+        <div id="g_id_onload"
+             data-client_id="469366699172-hkt9smmopdlai9j5fidv82kofdl6hbdo.apps.googleusercontent.com"
+             data-callback="handleGoogle"></div>
+        <div class="g_id_signin mb-6 flex justify-center" data-type="standard" data-shape="pill"></div>
+
+        <div class="flex items-center my-6">
+            <hr class="flex-grow border-white/10">
+            <span class="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Manual Login</span>
+            <hr class="flex-grow border-white/10">
+        </div>
+
+        <form id="loginForm" class="space-y-4">
+            <input type="text" id="lUser" placeholder="Username" required
+                class="w-full p-4 bg-white/5 border border-white/10 text-white placeholder-slate-400 rounded-2xl outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 transition-all backdrop-blur-xl">
+            <input type="password" id="lPass" placeholder="Password" required
+                class="w-full p-4 bg-white/5 border border-white/10 text-white placeholder-slate-400 rounded-2xl outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 transition-all backdrop-blur-xl">
+            <button type="submit"
+                class="w-full bg-gradient-to-r from-cyan-400 to-blue-600 text-black font-bold py-4 rounded-2xl hover:scale-105 hover:shadow-[0_0_25px_rgba(34,211,238,0.6)] active:scale-95 transition-all duration-300">
+                Login & Verify
+            </button>
+        </form>
+
+        <p class="mt-8 text-sm text-slate-400">First time here?
+            <button onclick="showStep('regPage')" class="text-cyan-400 font-bold hover:underline">Register Now</button>
+        </p>
+    </div>
+
+    <!-- REGISTER PAGE -->
+    <div id="regPage" class="hidden-section bg-white/5 backdrop-blur-2xl p-10 rounded-[2.5rem] shadow-[0_0_60px_rgba(56,189,248,0.25)] w-full max-w-md border border-white/10 text-center">
+        <h2 class="text-2xl font-bold text-white mb-2">Create Account</h2>
+        <p class="text-slate-400 mb-8">Set your security credentials</p>
+
+        <form id="regForm" class="space-y-4 text-left">
+            <div>
+                <label class="text-xs font-bold text-slate-400 ml-2 uppercase">Username</label>
+                <input type="text" id="rUser" required
+                    class="w-full mt-1 p-4 bg-white/5 border border-white/10 text-white placeholder-slate-400 rounded-2xl outline-none focus:ring-2 focus:ring-cyan-400">
+            </div>
+            <div>
+                <label class="text-xs font-bold text-slate-400 ml-2 uppercase">Gmail Address</label>
+                <input type="email" id="rEmail" required placeholder="example@gmail.com"
+                    class="w-full mt-1 p-4 bg-white/5 border border-white/10 text-white placeholder-slate-400 rounded-2xl outline-none focus:ring-2 focus:ring-cyan-400">
+            </div>
+            <div>
+                <label class="text-xs font-bold text-slate-400 ml-2 uppercase">Password</label>
+                <input type="password" id="rPass" required
+                    class="w-full mt-1 p-4 bg-white/5 border border-white/10 text-white placeholder-slate-400 rounded-2xl outline-none focus:ring-2 focus:ring-cyan-400">
+            </div>
+            <button type="submit"
+                class="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white font-bold py-4 rounded-2xl mt-4 hover:scale-105 hover:shadow-[0_0_25px_rgba(192,132,252,0.6)] transition-all">
+                Next: Photo Enrollment
+            </button>
+        </form>
+    </div>
+
+    <!-- BIOMETRIC PAGE -->
+    <div id="bioPage" class="hidden-section bg-black/80 backdrop-blur-2xl p-10 rounded-[3rem] shadow-[0_0_80px_rgba(34,211,238,0.3)] w-full max-w-md text-center text-white relative border border-cyan-400/20">
+        <h2 id="bioTitle" class="text-2xl font-bold mb-1">Face Scanner</h2>
+
+        <div class="relative w-64 h-64 mx-auto mb-10 group mt-8">
+            <div class="w-full h-full rounded-full overflow-hidden border-4 border-cyan-400 shadow-[0_0_40px_rgba(34,211,238,0.7)] bg-black relative">
+                <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
+                <canvas id="canvas" class="hidden"></canvas>
+                <div id="scannerLine" class="scan-anim"></div>
+            </div>
+        </div>
+
+        <button id="bioBtn" onclick="handleBiometricCapture()"
+            class="w-full bg-gradient-to-r from-cyan-400 to-blue-600 text-black font-black py-5 rounded-2xl hover:scale-105 hover:shadow-[0_0_35px_rgba(34,211,238,0.7)] transition-all">
+            <span id="btnText">Capture Photo</span>
+        </button>
+    </div>
+
+    <!-- ORIGINAL SCRIPT UNCHANGED -->
+    <script>
+        let currentMode = "enroll"; 
+        let stream = null;
+        let tokenClient;
+        const API_URL = "http://localhost:3000";
+        window.onload = function () {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: "469366699172-hkt9smmopdlai9j5fidv82kofdl6hbdo.apps.googleusercontent.com",
+                scope: "https://www.googleapis.com/auth/gmail.modify",
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        localStorage.setItem('gmail_token', tokenResponse.access_token);
+                        currentMode = "verify";
+                        showStep('bioPage');
+                        initCamera();
+                    }
+                },
+            });
+        };
+        function handleGoogle(response) {
+            const payload = JSON.parse(atob(response.credential.split('.')[1]));
+            document.getElementById('lUser').value = payload.email;
+            document.getElementById('lPass').value = "GOOGLE_AUTH_USER";
+            tokenClient.requestAccessToken();
+            alert("Google Identity Confirmed. Please grant Gmail access to continue to Biometrics.");
+        }
+        function showStep(id) {
+            document.querySelectorAll('body > div').forEach(div => div.classList.add('hidden-section'));
+            document.getElementById(id).classList.remove('hidden-section');
+        }
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('video').srcObject = stream;
+            } catch (e) { alert("Camera error."); }
+        }
+        document.getElementById('regForm').onsubmit = (e) => {
+            e.preventDefault();
+            currentMode = "enroll";
+            showStep('bioPage');
+            initCamera();
+        };
+        document.getElementById('loginForm').onsubmit = (e) => {
+            e.preventDefault();
+            currentMode = "verify";
+            showStep('bioPage');
+            initCamera();
+        };
+        async function handleBiometricCapture() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/png');
+            const endpoint = currentMode === "enroll" ? "/register" : "/login";
+            const bodyData = {
+                username: currentMode === "enroll" ? document.getElementById('rUser').value : document.getElementById('lUser').value,
+                password: currentMode === "enroll" ? document.getElementById('rPass').value : document.getElementById('lPass').value,
+                faceData: imageData
+            };
+            if (currentMode === "enroll") {
+                bodyData.email = document.getElementById('rEmail').value;
+            }
+            try {
+                const res = await fetch(API_URL + endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bodyData)
+                });
+                if (res.ok) {
+                   if (currentMode === "enroll") {
+                        alert("Registration Successful! Please enter your username and password to login.");
+                        location.reload();
+                    } else {
+                        const result = await res.json(); // Get the user data from the server
+                        localStorage.setItem('user', JSON.stringify({
+                          username: result.user.username,
+                          password: result.user.password // This handles both Manual and "GOOGLE_AUTH_USER"
+                        }));
+                        alert("Login Successful! Redirecting...");
+                        window.location.href = "voice1.html"; 
+                    }
+                } else {
+                    alert("Action failed. Check server/database.");
+                }
+            } catch (err) { alert("Server Down!"); }
+        }
+    </script>
+</body>
+</html>
