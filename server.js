@@ -288,7 +288,7 @@ app.get('/', (req, res) => res.send("Bio-Secure Server is Running 🚀"));
 const PORT = process.env.PORT || 3000;
 
 const server = app.listen(PORT, () => {
-    console.log(`🚀 Server active at: http://localhost:${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
         console.error(`❌ Error: Port ${PORT} is already in use.`);
