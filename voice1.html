@@ -81,7 +81,6 @@
     const GMAIL_TOKEN = localStorage.getItem('gmail_token');
 
     // --- TELEGRAM CONFIGURATION ---
-    const TELEGRAM_TOKEN = '8134338978:AAEvp61dDpQ7OFUmu4moyX55EOVNKnZ14F0';
     const DEMO_GROUP_ID = "-5247206828";
     
     // Telegram State & Queue Management
@@ -493,9 +492,11 @@
 
     const GMAIL_TOKEN = localStorage.getItem('gmail_token');
 
-    //const TELEGRAM_TOKEN = '8134338978:AAEvp61dDpQ7OFUmu4moyX55EOVNKnZ14F0';
     const DEMO_GROUP_ID = "-5247206828";
-    const API_URL = "http://localhost:3000";
+   // const API_URL = "http://localhost:3000";
+   const API_URL = window.location.hostname === "localhost" 
+    ? "http://localhost:3000" 
+    : "https://your-app-name.onrender.com"; // 👈 Paste YOUR Render link here
     
     let lastUpdateId = 0;
     let tgState = "idle"; 
