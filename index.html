@@ -479,14 +479,15 @@
         async function handleBiometricCapture() {
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
+            //canvas.width = video.videoWidth;
+            //canvas.height = video.videoHeight;
+            canvas.width = 320; 
+            canvas.height = 240;
+            canvas.getContext('2d').drawImage(video, 0, 0,canvas.width, canvas.height);
             
             // 1. Convert image to data URL
             //const imageData = canvas.toDataURL('image/png');
-            const imageData = canvas.toDataURL('image/png'); // ❌ Too big for cloud database
-
+            const imageData = canvas.toDataURL('image/jpeg', 0.3);
             const endpoint = currentMode === "enroll" ? "/register" : "/login";
             
             // 2. Build the correct object for the database
