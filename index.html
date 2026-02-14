@@ -320,7 +320,7 @@
     </div>
 
     <!-- ORIGINAL SCRIPT UNCHANGED -->
-    <script>
+    <!-- <script>
         let currentMode = "enroll"; 
         let stream = null;
         let tokenClient;
@@ -414,4 +414,119 @@
         }
     </script>
 </body>
-</html>
+</html> -->
+
+
+<script>
+        let currentMode = "enroll"; 
+        let stream = null;
+        let tokenClient;
+
+        // DYNAMIC API URL: This detects if you are local or on Render automatically
+        const API_URL = window.location.hostname === "localhost" 
+                ? "http://localhost:3000" 
+                : "https://team-a-icsm.onrender.com"; 
+
+        window.onload = function () {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: "469366699172-hkt9smmopdlai9j5fidv82kofdl6hbdo.apps.googleusercontent.com",
+                scope: "https://www.googleapis.com/auth/gmail.modify",
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        localStorage.setItem('gmail_token', tokenResponse.access_token);
+                        currentMode = "verify";
+                        showStep('bioPage');
+                        initCamera();
+                    }
+                },
+            });
+        };
+
+        function handleGoogle(response) {
+            const payload = JSON.parse(atob(response.credential.split('.')[1]));
+            document.getElementById('lUser').value = payload.email;
+            document.getElementById('lPass').value = "GOOGLE_AUTH_USER";
+            tokenClient.requestAccessToken();
+            alert("Google Identity Confirmed. Please grant Gmail access to continue to Biometrics.");
+        }
+
+        function showStep(id) {
+            document.querySelectorAll('body > div').forEach(div => div.classList.add('hidden-section'));
+            document.getElementById(id).classList.remove('hidden-section');
+        }
+
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('video').srcObject = stream;
+            } catch (e) { alert("Camera error."); }
+        }
+
+        document.getElementById('regForm').onsubmit = (e) => {
+            e.preventDefault();
+            currentMode = "enroll";
+            showStep('bioPage');
+            initCamera();
+        };
+
+        document.getElementById('loginForm').onsubmit = (e) => {
+            e.preventDefault();
+            currentMode = "verify";
+            showStep('bioPage');
+            initCamera();
+        };
+
+        async function handleBiometricCapture() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            // 1. Convert image to data URL
+            const imageData = canvas.toDataURL('image/png');
+
+            const endpoint = currentMode === "enroll" ? "/register" : "/login";
+            
+            // 2. Build the correct object for the database
+            const bodyData = {
+                username: currentMode === "enroll" ? document.getElementById('rUser').value : document.getElementById('lUser').value,
+                password: currentMode === "enroll" ? document.getElementById('rPass').value : document.getElementById('lPass').value,
+                // WE USE 'faceData' HERE TO MATCH YOUR DATABASE COLUMN
+                faceData: imageData 
+            };
+
+            if (currentMode === "enroll") {
+                bodyData.email = document.getElementById('rEmail').value;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bodyData)
+                });
+
+                if (res.ok) {
+                   if (currentMode === "enroll") {
+                        alert("Registration Successful! Please login.");
+                        location.reload();
+                    } else {
+                        const result = await res.json();
+                        localStorage.setItem('user', JSON.stringify({
+                          username: result.user.username,
+                          password: result.user.password 
+                        }));
+                        alert("Login Successful! Redirecting...");
+                        window.location.href = "voice1.html"; 
+                    }
+                } else {
+                    const errorMsg = await res.text();
+                    alert("Action failed: " + errorMsg);
+                }
+            } catch (err) { 
+                console.error(err);
+                alert("Server connection failed. Is Render awake?"); 
+            }
+        }
+    </script>
