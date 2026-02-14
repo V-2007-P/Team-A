@@ -494,9 +494,10 @@
 
     const DEMO_GROUP_ID = "-5247206828";
    // const API_URL = "http://localhost:3000";
-   const API_URL = window.location.hostname === "localhost" 
-    ? "http://localhost:3000" 
-    : "https://your-app-name.onrender.com"; // 👈 Paste YOUR Render link here
+   // Replace the old localhost line with this dynamic one:
+        const API_URL = window.location.hostname === "localhost" 
+            ? "http://localhost:3000" 
+            : "https://team-a-icsm.onrender.com"; // 👈 Paste YOUR Render link here
     
     let lastUpdateId = 0;
     let tgState = "idle"; 

@@ -325,9 +325,10 @@
         let stream = null;
         let tokenClient;
         //const API_URL = "http://localhost:3000";
-        const API_URL = window.location.hostname === "localhost" 
-                    ? "http://localhost:3000" 
-                    : "https://your-app-name.onrender.com"; // 👈 Paste YOUR Render link here
+      // Replace the old localhost line with this dynamic one:
+          const API_URL = window.location.hostname === "localhost" 
+                ? "http://localhost:3000" 
+                : "https://team-a-icsm.onrender.com"; // 👈 Paste YOUR Render link here
         window.onload = function () {
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: "469366699172-hkt9smmopdlai9j5fidv82kofdl6hbdo.apps.googleusercontent.com",
