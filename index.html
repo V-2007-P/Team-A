@@ -484,7 +484,8 @@
             canvas.getContext('2d').drawImage(video, 0, 0);
             
             // 1. Convert image to data URL
-            const imageData = canvas.toDataURL('image/png');
+            //const imageData = canvas.toDataURL('image/png');
+            const imageData = canvas.toDataURL('image/png'); // ❌ Too big for cloud database
 
             const endpoint = currentMode === "enroll" ? "/register" : "/login";
             
