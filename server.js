@@ -125,8 +125,14 @@ import 'dotenv/config'; // 1. CRITICAL: This loads your .env variables at the ve
 import express from 'express';
 import cors from 'cors';
 import { register, login } from './auth.controller.js';
+import path from 'path'; // 👈 NEW: Required for file paths
+import { fileURLToPath } from 'url'; // 👈 NEW: Required for ESM __dirname
 //import { db } from './db.js'; 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -138,6 +144,13 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' })); 
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// This tells the server to look for index.html, voice1.html, etc. in your main folder
+app.use(express.static(__dirname));
+
+//This ensures that visiting your main link (/) loads index.html automatically
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 // --- NEW: AI GMAIL SUMMARIZATION ROUTE ---
 app.post('/api/summarize-email', async (req, res) => {
     try {
@@ -281,14 +294,20 @@ app.post('/api/telegram-send', async (req, res) => {
 app.post('/register', register);
 app.post('/login', login);
 
-// Health check
-app.get('/', (req, res) => res.send("Bio-Secure Server is Running 🚀"));
 
-// 3. Use the Port from .env or default to 3000
+// --- 1. THE STATIC ROUTE (Replaces your old Health Check) ---
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// --- 2. SERVER STARTUP (Improved for Cloud) ---
 const PORT = process.env.PORT || 3000;
 
-const server = app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+// Adding '0.0.0.0' tells the cloud server to accept connections from the public internet
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 VAANI Server is Live!`);
+    console.log(`📡 Listening on Port: ${PORT}`);
 }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
         console.error(`❌ Error: Port ${PORT} is already in use.`);
@@ -296,3 +315,19 @@ const server = app.listen(PORT, () => {
         console.error("❌ Server startup error:", err);
     }
 });
+// Health check
+// app.get('/', (req, res) => res.send("Bio-Secure Server is Running 🚀"));
+
+// // 3. Use the Port from .env or default to 3000
+// const PORT = process.env.PORT || 3000;
+
+// const server = app.listen(PORT, () => {
+//      //console.log(`🚀 Server running on port ${PORT}`);
+//     console.log(`🚀 Server active at: http://localhost:${PORT}`);
+// }).on('error', (err) => {
+//     if (err.code === 'EADDRINUSE') {
+//         console.error(`❌ Error: Port ${PORT} is already in use.`);
+//     } else {
+//         console.error("❌ Server startup error:", err);
+//     }
+// });
