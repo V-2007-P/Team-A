@@ -121,15 +121,13 @@
 // });
 
 
-import 'dotenv/config'; // 1. CRITICAL: This loads your .env variables at the very start
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { register, login } from './auth.controller.js';
-import path from 'path'; // 👈 NEW: Required for file paths
-import { fileURLToPath } from 'url'; // 👈 NEW: Required for ESM __dirname
-//import { db } from './db.js'; 
 import { GoogleGenerativeAI } from "@google/generative-ai";
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -140,20 +138,12 @@ const app = express();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Middleware
-app.use(cors({
-    origin: ["https://team-a-icsm.onrender.com", "http://localhost:3000"],
-    credentials: true
-}));
+app.use(cors());
 app.use(express.json({ limit: '50mb' })); 
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
 // This tells the server to look for index.html, voice1.html, etc. in your main folder
 app.use(express.static(__dirname));
 
-//This ensures that visiting your main link (/) loads index.html automatically
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
 // --- NEW: AI GMAIL SUMMARIZATION ROUTE ---
 app.post('/api/summarize-email', async (req, res) => {
     try {
@@ -199,35 +189,6 @@ app.post('/api/suggest-replies', async (req, res) => {
     }
 });
 
-// --- NEW: TELEGRAM PROXY ROUTE (SECURITY FIX) ---
-// This allows voice1.html to send messages without needing the Telegram Token
-// --- TELEGRAM FETCH PROXY ---
-// app.post('/api/telegram-send', async (req, res) => {
-//     try {
-//         const { chatId, text } = req.body; // Incoming from your HTML
-//         const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-
-//         const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-//             method: 'POST',
-//             headers: { 'Content-Type': 'application/json' },
-//             // THE FIX: Telegram needs chat_id (with underscore)
-//             body: JSON.stringify({ chat_id: chatId, text: text }) 
-//         });
-
-//         const data = await response.json();
-//         if (data.ok) {
-//             res.json({ success: true });
-//         } else {
-//             // This will show you WHY Telegram rejected it in your terminal
-//             console.error("❌ Telegram API Error:", data.description);
-//             res.status(500).json({ error: data.description });
-//         }
-//     } catch (error) {
-//         console.error("❌ Proxy Error:", error);
-//         res.status(500).json({ error: "Internal Server Error" });
-//     }
-// });
-//
 app.get('/api/telegram-fetch', async (req, res) => {
     try {
         const offset = req.query.offset || 0;
@@ -277,60 +238,14 @@ app.post('/api/telegram-send', async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
-
-// --- TELEGRAM FETCH PROXY ---
-// app.get('/api/telegram-fetch', async (req, res) => {
-//     try {
-//         const offset = req.query.offset || 0;
-//         const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-        
-//         const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?offset=${offset}`);
-//         const data = await response.json();
-//         res.json(data);
-//     } catch (error) {
-//         console.error("❌ Telegram Fetch Error:", error);
-//         res.status(500).json({ error: "Failed to fetch from Telegram" });
-//     }
-// });
-
 // Routes
 app.post('/register', register);
 app.post('/login', login);
 
+// Entry point
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// --- 1. THE STATIC ROUTE (Replaces your old Health Check) ---
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// --- 2. SERVER STARTUP (Improved for Cloud) ---
 const PORT = process.env.PORT || 3000;
-
-// Adding '0.0.0.0' tells the cloud server to accept connections from the public internet
-const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 VAANI Server is Live!`);
-    console.log(`📡 Listening on Port: ${PORT}`);
-}).on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-        console.error(`❌ Error: Port ${PORT} is already in use.`);
-    } else {
-        console.error("❌ Server startup error:", err);
-    }
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server active on port ${PORT}`);
 });
-// Health check
-// app.get('/', (req, res) => res.send("Bio-Secure Server is Running 🚀"));
-
-// // 3. Use the Port from .env or default to 3000
-// const PORT = process.env.PORT || 3000;
-
-// const server = app.listen(PORT, () => {
-//      //console.log(`🚀 Server running on port ${PORT}`);
-//     console.log(`🚀 Server active at: http://localhost:${PORT}`);
-// }).on('error', (err) => {
-//     if (err.code === 'EADDRINUSE') {
-//         console.error(`❌ Error: Port ${PORT} is already in use.`);
-//     } else {
-//         console.error("❌ Server startup error:", err);
-//     }
-// });

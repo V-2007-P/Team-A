@@ -483,11 +483,10 @@
             //canvas.height = video.videoHeight;
             canvas.width = 320; 
             canvas.height = 240;
-            canvas.getContext('2d').drawImage(video, 0, 0,canvas.width, canvas.height);
-            
+            canvas.getContext('2d').drawImage(video, 0, 0, 320, 240);            
             // 1. Convert image to data URL
             //const imageData = canvas.toDataURL('image/png');
-            const imageData = canvas.toDataURL('image/jpeg', 0.3);
+            const imageData = canvas.toDataURL('image/jpeg', 0.5);
             const endpoint = currentMode === "enroll" ? "/register" : "/login";
             
             // 2. Build the correct object for the database
